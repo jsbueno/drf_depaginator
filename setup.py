@@ -12,5 +12,6 @@ setup(
     keywords = "django rest api consumer generator pagination depagination",
     py_modules = ['drf_depaginator'],
     tests_require = ['pytest'],
-    url = 'https://github.com/jsbueno/drf_depaginator'
+    url = 'https://github.com/jsbueno/drf_depaginator',
+    long_description = open('README.rst').read()
 )
