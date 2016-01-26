@@ -3,7 +3,10 @@
 from cgi import parse_qs
 
 import logging
-from urllib.parse import urlsplit
+try:
+    from urllib.parse import urlsplit
+except ImportError:
+    from urlparse import urlsplit
 
 
 """
@@ -17,7 +20,7 @@ Used by Django rest framework API consumers to depaginate API results
 logger = logging.getLogger(__name__)
 
 
-class AutoDepaginator:
+class AutoDepaginator(object):
     def __init__(self, fetcher, **params):
         """
         fetcher: a callable that returns the json returned by the default
@@ -52,7 +55,10 @@ class AutoDepaginator:
                 self.count = int(page['count'])
                 results = page['results']
 
-            yield from results
+            # This would be the case for yield from, but we
+            # need Python 2.x compatibility
+            for result in results:
+                yield result
 
             if next_url:
                 query_params = parse_qs(urlsplit(next_url).query)
