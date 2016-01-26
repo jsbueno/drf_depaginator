@@ -39,29 +39,43 @@ class AutoDepaginator(object):
         """
         self.fetcher = fetcher
         self.params = params
-        self.count = 0
+        self._count = None
+        self._ready = False
+
+    def _read_next_page(self):
+        page = self._page = self.fetcher(**self.params)
+        try:
+            self._next_url = page['next']
+        except (TypeError, KeyError):
+            logger.warning('Received a non-paginated result for {}. Check the system version on the remote site'.format(self.fetcher.__name__))
+            self._results = page
+            self._count = len(self._results)
+            self._next_url = None
+        else:
+            self._count = int(page['count'])
+            self._results = page['results']
+        self._ready = True
+
+
+
+    @property
+    def count(self):
+        if self._count is None:
+            self._read_next_page()
+        return self._count
 
     def __iter__(self):
         while True:
-            page = self.fetcher(**self.params)
-            try:
-                next_url = page['next']
-            except (TypeError, KeyError):
-                logger.warning('Received a non-paginated result for {}. Check the system version on the remote site'.format(self.fetcher.__name__))
-                results = page
-                self.count = len(results)
-                next_url = None
-            else:
-                self.count = int(page['count'])
-                results = page['results']
-
+            if not self._ready:
+                self._read_next_page()
             # This would be the case for yield from, but we
             # need Python 2.x compatibility
-            for result in results:
+            for result in self._results:
                 yield result
+            self._ready = False
 
-            if next_url:
-                query_params = parse_qs(urlsplit(next_url).query)
+            if self._next_url:
+                query_params = parse_qs(urlsplit(self._next_url).query)
 
                 self.params['limit'] = int(query_params['limit'][0])
                 self.params['offset'] = int(query_params['offset'][0])

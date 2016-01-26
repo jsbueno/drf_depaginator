@@ -78,3 +78,12 @@ def test_depaginator_works_with_non_paginating_results_and_warns():
         assert response == result['results']
         assert any(str(call).startswith('call.warning') for call in paginator_logger.mock_calls), \
             'AutoDepaginator did not log warning about non-compliant API return'
+
+
+def test_depaginator_len_works_even_without_iterating():
+    fetcher = Mock()
+    fetcher.side_effect = [result]
+    paginator = AutoDepaginator(fetcher)
+    assert len(paginator)
+
+
