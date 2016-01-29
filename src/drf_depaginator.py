@@ -38,11 +38,17 @@ class AutoDepaginator(object):
 
         """
         self.fetcher = fetcher
+        self.limit = params.get('limit', None)
+        self.offset = params.get('offset', 0)
+        self._results_yielded = 0
         self.params = params
         self._count = None
         self._ready = False
+        self._iteration_messed = False
+        self._previous_next_url = None
 
     def _read_next_page(self):
+        self._results_offset = self.params.get('offset', 0)
         page = self._page = self.fetcher(**self.params)
         try:
             self._next_url = page['next']
@@ -57,21 +63,30 @@ class AutoDepaginator(object):
         self._ready = True
 
 
-
     @property
     def count(self):
         if self._count is None:
             self._read_next_page()
+        if self.limit is not None:
+            return min(self._count, self.limit)
         return self._count
 
     def __iter__(self):
         while True:
             if not self._ready:
                 self._read_next_page()
-            # This would be the case for yield from, but we
-            # need Python 2.x compatibility
-            for result in self._results:
+            for i, result in enumerate(self._results[:]):
+                if self._iteration_messed:
+
+                    # a getitem on this object was called while iterating on
+                    # self
+                    self._next_url = self._previous_next_url
+                    self._previous_next_url = None
+                    self._iteration_messed = False
+                if self.limit is not None and self._results_yielded >= self.limit:
+                    raise StopIteration
                 yield result
+                self._results_yielded += 1
             self._ready = False
 
             if self._next_url:
@@ -81,6 +96,29 @@ class AutoDepaginator(object):
                 self.params['offset'] = int(query_params['offset'][0])
             else:
                 break
+
+    def __getitem__(self, index):
+        if not isinstance(index, (int, slice)):
+            raise TypeError('Results index must be an integer')
+        if isinstance(index, slice):
+            return [self[i] for i in range(index.start or 0, index.stop or len(self), index.step or 1)]
+        if index < 0:
+            index += len(self)
+        if index >= len(self):
+            raise IndexError('Result index out of range')
+        # Latest absolute fetched offset (on the backend)  minus configured
+        # starting offset (on this client)
+        current_results_relative_offset = self._results_offset - self.offset
+        if current_results_relative_offset + index >= len(self._results):
+            if not self._previous_next_url:
+                self._previous_next_url = self._next_url
+            self._iteration_messed = True
+            self.params['offset'] = self.offset + index
+            self._read_next_page()
+            current_results_relative_offset = self._results_offset - self.offset
+
+        return self._results[index - current_results_relative_offset]
+
 
     def __len__(self):
         return self.count

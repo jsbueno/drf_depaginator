@@ -4,7 +4,7 @@ from setuptools import setup
 
 setup(
     name = 'drf_depaginator',
-    version = "0.3.1",
+    version = "0.3.2",
     package_dir = { '': 'src'},
     license = "APACHE",
     author = "João S. O. Bueno",

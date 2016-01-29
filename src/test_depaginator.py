@@ -21,6 +21,15 @@ result = {
 }
 
 
+def real_fetcher(limit=2, offset=0):
+        results = [{0: 0}, {1: 1}, {2: 2}, {3: 3}]
+        if offset + limit < len(results):
+            next_ = '/?limit={}&offset={}'.format(limit, offset + limit)
+        else:
+            next_ = None
+        return {'count': len(results), 'next': next_, 'results': results[offset: offset + limit]}
+
+
 def test_depaginator_calls_fetcher():
     fetcher = Mock()
     fetcher.side_effect = [result]
@@ -87,3 +96,54 @@ def test_depaginator_len_works_even_without_iterating():
     assert len(paginator)
 
 
+def test_depaginator_respects_passed_limit():
+    def _get_fetcher():
+        fetcher = Mock()
+        fetcher.side_effect = [result, {'next': None, 'count': 4, 'results': [{'somekey': 'yet another content'}, {}]}]
+        return fetcher
+
+    paginator = AutoDepaginator(_get_fetcher(), limit=1)
+    assert len(list(paginator)) == 1
+
+    paginator = AutoDepaginator(_get_fetcher(), limit=3)
+    assert len(list(paginator)) == 3
+
+
+def test_depaginator_respects_passed_offset():
+
+    paginator = AutoDepaginator(real_fetcher, limit=1, offset=2)
+    results = list(paginator)
+    assert len(results) == 1
+    assert results[0] == {2: 2}
+
+
+def test_depaginator_getitem_works():
+    fetcher = Mock()
+    fetcher.side_effect = [result]
+    paginator = AutoDepaginator(fetcher)
+    x = paginator[0]
+    assert 'somekey' in x
+    assert x['somekey'] == 'somecontent'
+    assert paginator[1]['somekey'] == 'another content'
+
+
+def test_depaginator_getitem_works_across_pages():
+    def _get_fetcher():
+        fetcher = Mock()
+        fetcher.side_effect = [result, {'next': None, 'count': 4, 'results': [{'somekey': 'yet another content'}, {}]}]
+        return fetcher
+
+    paginator = AutoDepaginator(_get_fetcher())
+    x = paginator[2]
+    assert 'somekey' in x
+    assert x['somekey'] == 'yet another content'
+
+
+def test_depaginator_iteration_works_intercalled_with_getitem():
+    paginator = AutoDepaginator(real_fetcher)
+
+    for i, result in enumerate(paginator):
+        if i == 2:
+            assert paginator[0][0] == 0
+    assert i == 3
+    assert result == {3: 3}
